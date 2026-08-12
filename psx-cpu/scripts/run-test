@@ -1,43 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_SPEC="${1:-}"
-TOP_RTL="$ROOT_DIR/rtl/cpu32.sv"
-TEST_CPP="$ROOT_DIR/tests/${TEST_SPEC}.cpp"
-TEST_HEADER="$ROOT_DIR/tests/${TEST_SPEC}.h"
-TEST_BASENAME="$(basename "${TEST_SPEC}")"
-TEST_FUNC="${TEST_BASENAME#test_}"
 
-if [[ -z "$TEST_SPEC" ]]; then
-    echo "usage: $0 <test-path>" >&2
-    echo "example: $0 pc/test_pc" >&2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+RTL_FILE="${1:-}"
+TOP_MODULE="${2:-}"
+TEST_SPEC="${3:-}"
+
+
+if [[ -z "$RTL_FILE" || -z "$TOP_MODULE" || -z "$TEST_SPEC" ]]; then
+    echo "usage: $0 <rtl-file> <top-module> <test-path>" >&2
+    echo "example: $0 rtl/alu32.sv alu tests/alu/test_alu" >&2
+    echo "example: $0 rtl/cpu32.sv r3000a tests/pc/test_pc" >&2
     exit 1
 fi
+
+
+TOP_RTL="$ROOT_DIR/$RTL_FILE"
+
+TEST_CPP="$ROOT_DIR/${TEST_SPEC}.cpp"
+TEST_HEADER="$ROOT_DIR/${TEST_SPEC}.h"
+TEST_BASENAME="$(basename "$TEST_SPEC")"
+
 
 if [[ "$TEST_BASENAME" != test_* ]]; then
     echo "error: test path must point to a file named test_<name>" >&2
     exit 1
 fi
 
-BUILD_KEY="${TEST_SPEC//\//__}"
+
+# rtl/alu32.sv -> alu32
+RTL_BASENAME="$(basename "$RTL_FILE" .sv)"
+
+# alu32 -> Valu32
+DUT_CLASS="V${RTL_BASENAME}"
+
+
+# alu32 + tests/alu/test_alu
+# -> alu32__tests__alu__test_alu
+BUILD_KEY="${RTL_BASENAME}__${TEST_SPEC//\//__}"
+
 BUILD_DIR="$ROOT_DIR/obj_dir/$BUILD_KEY"
 GENERATED_MAIN="$BUILD_DIR/main_${BUILD_KEY}.cpp"
+
 
 if [[ ! -f "$TEST_CPP" || ! -f "$TEST_HEADER" ]]; then
     echo "error: expected $TEST_CPP and $TEST_HEADER" >&2
     exit 1
 fi
 
+
 if [[ ! -f "$TOP_RTL" ]]; then
-    echo "error: expected top-level RTL at $TOP_RTL" >&2
+    echo "error: expected RTL file $TOP_RTL" >&2
     exit 1
 fi
 
+
 mkdir -p "$BUILD_DIR"
 
+
 cat > "$GENERATED_MAIN" <<EOF
-#include "Vcpu32.h"
+#include "${DUT_CLASS}.h"
 #include "verilated.h"
 
 #include "$TEST_HEADER"
@@ -45,7 +69,7 @@ cat > "$GENERATED_MAIN" <<EOF
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
 
-    Vcpu32 dut;
+    ${DUT_CLASS} dut;
     ${TEST_BASENAME}(dut);
     dut.final();
 
@@ -53,11 +77,12 @@ int main(int argc, char** argv) {
 }
 EOF
 
+
 verilator \
     --cc \
     "$TOP_RTL" \
-    --top-module r3000a \
-    --prefix Vcpu32 \
+    --top-module "$TOP_MODULE" \
+    --prefix "$DUT_CLASS" \
     --exe \
     --build \
     "$GENERATED_MAIN" \
@@ -65,4 +90,5 @@ verilator \
     "$TEST_CPP" \
     --Mdir "$BUILD_DIR"
 
-"$BUILD_DIR/Vcpu32"
+
+"$BUILD_DIR/$DUT_CLASS"
