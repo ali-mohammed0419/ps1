@@ -1,0 +1,4 @@
+#macOS
+.DS_Store
+#Verilator build output
+obj_dir/
