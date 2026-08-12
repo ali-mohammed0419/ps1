@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TEST_SPEC="${1:-}"
+TOP_RTL="$ROOT_DIR/rtl/cpu32.sv"
+TEST_CPP="$ROOT_DIR/tests/${TEST_SPEC}.cpp"
+TEST_HEADER="$ROOT_DIR/tests/${TEST_SPEC}.h"
+TEST_BASENAME="$(basename "${TEST_SPEC}")"
+TEST_FUNC="${TEST_BASENAME#test_}"
+
+if [[ -z "$TEST_SPEC" ]]; then
+    echo "usage: $0 <test-path>" >&2
+    echo "example: $0 pc/test_pc" >&2
+    exit 1
+fi
+
+if [[ "$TEST_BASENAME" != test_* ]]; then
+    echo "error: test path must point to a file named test_<name>" >&2
+    exit 1
+fi
+
+BUILD_KEY="${TEST_SPEC//\//__}"
+BUILD_DIR="$ROOT_DIR/obj_dir/${BUILD_KEY}_wave"
+GENERATED_MAIN="$BUILD_DIR/main_${BUILD_KEY}_wave.cpp"
+WAVE_DIR="$ROOT_DIR/waves"
+WAVE_FILE="$WAVE_DIR/${BUILD_KEY}.vcd"
+
+if [[ ! -f "$TEST_CPP" || ! -f "$TEST_HEADER" ]]; then
+    echo "error: expected $TEST_CPP and $TEST_HEADER" >&2
+    exit 1
+fi
+
+if [[ ! -f "$TOP_RTL" ]]; then
+    echo "error: expected top-level RTL at $TOP_RTL" >&2
+    exit 1
+fi
+
+if ! command -v surfer >/dev/null 2>&1; then
+    echo "error: surfer is not installed or not on PATH" >&2
+    exit 1
+fi
+
+mkdir -p "$BUILD_DIR" "$WAVE_DIR"
+
+cat > "$GENERATED_MAIN" <<EOF
+#include "Vcpu32.h"
+#include "verilated.h"
+
+#include "$ROOT_DIR/sim/tb.h"
+#include "$TEST_HEADER"
+
+int main(int argc, char** argv) {
+    Verilated::commandArgs(argc, argv);
+
+    Vcpu32 dut;
+    tb_init_trace(dut, "$WAVE_FILE");
+    ${TEST_BASENAME}(dut);
+    tb_close_trace();
+    dut.final();
+
+    return 0;
+}
+EOF
+
+verilator \
+    --cc \
+    --trace \
+    "$TOP_RTL" \
+    --top-module r3000a \
+    --prefix Vcpu32 \
+    --exe \
+    --build \
+    "$GENERATED_MAIN" \
+    "$ROOT_DIR/sim/tb.cpp" \
+    "$TEST_CPP" \
+    --Mdir "$BUILD_DIR"
+
+"$BUILD_DIR/Vcpu32"
+surfer "$WAVE_FILE"
