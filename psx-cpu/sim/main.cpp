@@ -1,14 +1,15 @@
-#include "Vcpu32.h"
 #include "verilated.h"
+#include "test_config.h"
 
-#include "../tests/pc/test_pc.h"
+#include DUT_HEADER
+#include TEST_HEADER
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
 
-    Vcpu32 dut;
+    DUT_CLASS dut;
 
-    test_pc(dut);
+    TEST_FUNCTION(dut);
 
     dut.final();
 
