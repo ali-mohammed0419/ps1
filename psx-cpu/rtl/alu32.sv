@@ -1,16 +1,4 @@
-typedef enum logic [3:0] {
-    ALU_ADD,
-    ALU_SUB,
-    ALU_AND,
-    ALU_OR,
-    ALU_XOR,
-    ALU_NOR,
-    ALU_SLT,
-    ALU_SLTU,
-    ALU_SLL,
-    ALU_SRL,
-    ALU_SRA
-} alu_func_t;
+import mips_defs::*;
 
 module alu (
     input   logic [31:0]    Xin,
