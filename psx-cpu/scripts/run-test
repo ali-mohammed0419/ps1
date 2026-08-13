@@ -1,94 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TESTBENCH_SPEC="${1:-}"
 
-RTL_FILE="${1:-}"
-TOP_MODULE="${2:-}"
-TEST_SPEC="${3:-}"
-
-
-if [[ -z "$RTL_FILE" || -z "$TOP_MODULE" || -z "$TEST_SPEC" ]]; then
-    echo "usage: $0 <rtl-file> <top-module> <test-path>" >&2
-    echo "example: $0 rtl/alu32.sv alu tests/alu/test_alu" >&2
-    echo "example: $0 rtl/cpu32.sv r3000a tests/pc/test_pc" >&2
+if [[ $# -ne 1 || -z "$TESTBENCH_SPEC" ]]; then
+    echo "usage: $0 <testbench.sv>" >&2
+    echo "example: $0 tests/alu/test_alu.sv" >&2
     exit 1
 fi
 
-
-TOP_RTL="$ROOT_DIR/$RTL_FILE"
-
-TEST_CPP="$ROOT_DIR/${TEST_SPEC}.cpp"
-TEST_HEADER="$ROOT_DIR/${TEST_SPEC}.h"
-TEST_BASENAME="$(basename "$TEST_SPEC")"
-
-
-if [[ "$TEST_BASENAME" != test_* ]]; then
-    echo "error: test path must point to a file named test_<name>" >&2
+if [[ "$TESTBENCH_SPEC" != *.sv ]]; then
+    echo "error: testbench must be a SystemVerilog file (*.sv)" >&2
     exit 1
 fi
 
+TESTBENCH="$ROOT_DIR/$TESTBENCH_SPEC"
+TEST_MODULE="$(basename "$TESTBENCH" .sv)"
 
-# rtl/alu32.sv -> alu32
-RTL_BASENAME="$(basename "$RTL_FILE" .sv)"
-
-# alu32 -> Valu32
-DUT_CLASS="V${RTL_BASENAME}"
-
-
-# alu32 + tests/alu/test_alu
-# -> alu32__tests__alu__test_alu
-BUILD_KEY="${RTL_BASENAME}__${TEST_SPEC//\//__}"
-
-BUILD_DIR="$ROOT_DIR/obj_dir/$BUILD_KEY"
-GENERATED_MAIN="$BUILD_DIR/main_${BUILD_KEY}.cpp"
-
-
-if [[ ! -f "$TEST_CPP" || ! -f "$TEST_HEADER" ]]; then
-    echo "error: expected $TEST_CPP and $TEST_HEADER" >&2
+if [[ ! -f "$TESTBENCH" ]]; then
+    echo "error: expected testbench $TESTBENCH" >&2
     exit 1
 fi
 
-
-if [[ ! -f "$TOP_RTL" ]]; then
-    echo "error: expected RTL file $TOP_RTL" >&2
+if [[ ! "$TEST_MODULE" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "error: testbench filename must be a valid SystemVerilog module name" >&2
     exit 1
 fi
 
+BUILD_KEY="${TESTBENCH_SPEC%.sv}"
+BUILD_KEY="${BUILD_KEY//\//__}"
+BUILD_DIR="$ROOT_DIR/obj_dir/sv__${BUILD_KEY}"
+SIM_BINARY="$BUILD_DIR/V${TEST_MODULE}"
+
+RTL_SOURCES=("$ROOT_DIR/rtl/mips_defs.sv")
+for file in "$ROOT_DIR"/rtl/*.sv; do
+    [[ "$file" == "$ROOT_DIR/rtl/mips_defs.sv" ]] && continue
+    RTL_SOURCES+=("$file")
+done
 
 mkdir -p "$BUILD_DIR"
 
-
-cat > "$GENERATED_MAIN" <<EOF
-#include "${DUT_CLASS}.h"
-#include "verilated.h"
-
-#include "$TEST_HEADER"
-
-int main(int argc, char** argv) {
-    Verilated::commandArgs(argc, argv);
-
-    ${DUT_CLASS} dut;
-    ${TEST_BASENAME}(dut);
-    dut.final();
-
-    return 0;
-}
-EOF
-
-
 verilator \
-    --cc \
-    "$TOP_RTL" \
-    --top-module "$TOP_MODULE" \
-    --prefix "$DUT_CLASS" \
-    --exe \
-    --build \
-    "$GENERATED_MAIN" \
-    "$ROOT_DIR/sim/tb.cpp" \
-    "$TEST_CPP" \
-    --Mdir "$BUILD_DIR"
+    --binary \
+    --timing \
+    --timescale-override 1ns/1ps \
+    --Wno-fatal \
+    --top-module "$TEST_MODULE" \
+    --Mdir "$BUILD_DIR" \
+    "${RTL_SOURCES[@]}" \
+    "$TESTBENCH"
 
-
-"$BUILD_DIR/$DUT_CLASS"
+(cd "$ROOT_DIR" && "$SIM_BINARY")

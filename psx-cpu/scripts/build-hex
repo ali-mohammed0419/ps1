@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ASM_SPEC="${1:-program.asm}"
+HEX_SPEC="${2:-sim/program.hex}"
+
+if [[ $# -gt 2 ]]; then
+    echo "usage: $0 [input.asm] [output.hex]" >&2
+    echo "example: $0 program.asm sim/program.hex" >&2
+    exit 1
+fi
+
+ASM_PATH="$ROOT_DIR/$ASM_SPEC"
+HEX_PATH="$ROOT_DIR/$HEX_SPEC"
+
+if [[ ! -f "$ASM_PATH" ]]; then
+    echo "error: expected assembly file at $ASM_PATH" >&2
+    exit 1
+fi
+
+if ! command -v mipsel-linux-gnu-as >/dev/null 2>&1; then
+    echo "error: mipsel-linux-gnu-as is not installed or not on PATH" >&2
+    exit 1
+fi
+
+if ! command -v mipsel-linux-gnu-objcopy >/dev/null 2>&1; then
+    echo "error: mipsel-linux-gnu-objcopy is not installed or not on PATH" >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$HEX_PATH")"
+
+TEMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+OBJECT_PATH="$TEMP_DIR/program.o"
+BINARY_PATH="$TEMP_DIR/program.bin"
+
+mipsel-linux-gnu-as -o "$OBJECT_PATH" "$ASM_PATH"
+mipsel-linux-gnu-objcopy -j .text -O binary "$OBJECT_PATH" "$BINARY_PATH"
+
+od -An -tx1 -v "$BINARY_PATH" | awk '
+    {
+        for (i = 1; i <= NF; i++) {
+            byte[count++] = $i
+            if (count == 4) {
+                printf "%s%s%s%s\n", byte[3], byte[2], byte[1], byte[0]
+                count = 0
+            }
+        }
+    }
+    END {
+        if (count != 0) {
+            printf "error: program size is not word-aligned\n" > "/dev/stderr"
+            exit 1
+        }
+    }
+' > "$HEX_PATH"
+
+echo "wrote $HEX_SPEC"
