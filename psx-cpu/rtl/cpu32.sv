@@ -46,7 +46,8 @@ module r3000a (
         .immediate      (immediate),
         .address        (address),
         .funct          (funct),
-        .alu_op         (alu_op)
+        .alu_op         (alu_op),
+        .reg_wr         (decode_wr_en)
     );
 
     assign rf_wr_en = decode_wr_en && !reset;
@@ -70,13 +71,11 @@ module r3000a (
     );
 
     always_comb begin
-        decode_wr_en = 1'b0;
+        //decode_wr_en = 1'b0;
         wr_addr = 5'b0;
         wr_data = alu_out;
-        if(opcode == OP_SPECIAL && funct == FUNCT_ADD) begin
-            decode_wr_en = 1'b1;
+        if(opcode == OP_SPECIAL)
             wr_addr = rd;
-        end
     end
 
     always_comb begin

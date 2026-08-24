@@ -12,7 +12,8 @@ module decoder (
     output  logic [15:0]    immediate,
     output  logic [25:0]    address,
     output  logic [5:0]     funct,
-    output  logic [3:0]     alu_op
+    output  logic [3:0]     alu_op,
+    output  logic           reg_wr
 );
 
     assign opcode       = instruction[31:26];
@@ -28,8 +29,51 @@ module decoder (
         case (opcode)
             OP_SPECIAL: begin
                 case (funct)
+                    FUNCT_ADDU,
                     FUNCT_ADD: begin
                         alu_op = ALU_ADD;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_SUBU,
+                    FUNCT_SUB: begin
+                        alu_op = ALU_SUB;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_OR: begin
+                        alu_op = ALU_OR;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_XOR: begin
+                        alu_op = ALU_XOR;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_NOR: begin
+                        alu_op = ALU_NOR;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_AND: begin
+                        alu_op = ALU_AND;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_SLTU: begin
+                        alu_op = ALU_SLTU;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_SLT: begin
+                        alu_op = ALU_SLT;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_SLL: begin
+                        alu_op = ALU_SLL;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_SRL: begin
+                        alu_op = ALU_SRL;
+                        reg_wr = 1'b1;
+                    end
+                    FUNCT_SRA: begin
+                        alu_op = ALU_SRA;
+                        reg_wr = 1'b1;
                     end
                     default: begin end
                 endcase
