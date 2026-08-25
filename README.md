@@ -68,5 +68,3 @@ There are several testbenches available under ``` tests/```
 | `rtl/` | SystemVerilog source for the CPU, ALU, register file, decoder, and instruction memory |
 | `tests/` | Verilator testbenches for focused module and CPU checks |
 | `scripts/` | Helper scripts for hex generation, simulation, and waveform viewing |
-| `program.asm` | Sample assembly source used to generate the simulation program image |
-| `sim/program.hex` | Hex image loaded by the instruction memory during simulation |
